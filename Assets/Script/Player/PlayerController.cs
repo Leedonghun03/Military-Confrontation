@@ -11,6 +11,16 @@ public class PlayerController : MonoBehaviour
     private KeyCode keyCodeJump = KeyCode.Space; //점프 키 Space
     [SerializeField]
     private KeyCode keyCodeReload = KeyCode.R;  //재장전 키 R
+    [SerializeField]
+    private KeyCode keyCrouching = KeyCode.LeftControl; //앉기 키 왼쪽 컨트롤
+    [SerializeField]
+    private KeyCode keyLeftPeak = KeyCode.Q; //앉기 키 왼쪽 컨트롤
+    [SerializeField]
+    private KeyCode keyRightPeak = KeyCode.E; //앉기 키 왼쪽 컨트롤
+
+    [Header("Crouching")]
+    [SerializeField]
+    private bool crouching = false;      //앉기
 
     [Header("Audio Clips")]
     [SerializeField]
@@ -24,6 +34,8 @@ public class PlayerController : MonoBehaviour
     private PlayerAnimatorController animator;      //애니메이션 재생 제어
     private AudioSource audioSource;                //사운드 재생제어
     private WeaponAssaultRifle weapon;              //무기를 이용한 공격 제어
+    private CharacterController player;
+
 
     private void Awake()
     {
@@ -36,6 +48,7 @@ public class PlayerController : MonoBehaviour
         animator = GetComponent<PlayerAnimatorController>();
         audioSource = GetComponent<AudioSource>();
         weapon = GetComponentInChildren<WeaponAssaultRifle>();
+        player = GetComponentInChildren<CharacterController>();
     }
 
     private void Update()
@@ -64,13 +77,13 @@ public class PlayerController : MonoBehaviour
             bool isRun = false;
 
             //옆이나 뒤로 이동은 할 수 없다.
-            if (z > 0) isRun = Input.GetKey(keyCodeRun);    //z값이 커지면 isRun이 True로 변함 옆으로 이동은 안그럼
+            if (z > 0 && !crouching) isRun = Input.GetKey(keyCodeRun);    //z값이 커지면 isRun이 True로 변함 옆으로 이동은 안그럼
 
             movement.MoveSpeed = isRun == true ? status.RunSpeed : status.WalkSpeed;
             animator.MoveSpeed = isRun == true ? 1 : 0.5f;
             audioSource.clip = isRun == true ? audioClipRun : audioClipWalk;
 
-            if(audioSource.isPlaying == false)  //방향키 입력 여부는 매 프레임 확인하기 때문에 재생중일 때는 다시 재생하지 않도록 isPlaying으로 체크 후 재생
+            if (audioSource.isPlaying == false)  //방향키 입력 여부는 매 프레임 확인하기 때문에 재생중일 때는 다시 재생하지 않도록 isPlaying으로 체크 후 재생
             {
                 audioSource.loop = true;
                 audioSource.Play();
@@ -81,9 +94,28 @@ public class PlayerController : MonoBehaviour
             movement.MoveSpeed = 0;
             animator.MoveSpeed = 0;
 
-            if(audioSource.isPlaying == true)   //멈췄을 때 사운드가 재생중이면 정지한다.
+            if (audioSource.isPlaying == true)   //멈췄을 때 사운드가 재생중이면 정지한다.
             {
                 audioSource.Stop();
+            }
+        }
+
+        if (Input.GetKeyDown(keyCrouching))
+        {
+
+            if (!crouching)
+            {
+                crouching = true;
+
+                player.height = 1.3f;
+                transform.position = new Vector3(transform.position.x, transform.position.y - 0.5f, transform.position.z);
+            }
+            else
+            {
+                crouching = false;
+
+                player.height = 2.0f;
+                transform.position = new Vector3(transform.position.x, transform.position.y + 0.5f, transform.position.z);
             }
         }
 
@@ -109,9 +141,17 @@ public class PlayerController : MonoBehaviour
             weapon.StopWeaponAction();
         }
 
-        if(Input.GetKeyDown(keyCodeReload))
+        if(Input.GetMouseButtonDown(1))
         {
-            Debug.Log("R 입력됬음");
+            weapon.StartWeaponAction(1);
+        }
+        else if(Input.GetMouseButtonUp(1))
+        {
+            weapon.StopWeaponAction(1);
+        }
+
+        if (Input.GetKeyDown(keyCodeReload))
+        {
             weapon.StartReload();
         }
     }

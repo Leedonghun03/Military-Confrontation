@@ -20,8 +20,13 @@ public class PlayerAnimatorController : MonoBehaviour
 
     public void OnReload()
     {
-        Debug.Log("애니메이션 부르는중");
         animator.SetTrigger("onReload");
+    }
+
+    public bool AimModeIs
+    {
+        set => animator.SetBool("isAimMode", value);
+        get => animator.GetBool("isAimMode");
     }
 
     public void Play(string stateName, int layer, float normalizedTime)

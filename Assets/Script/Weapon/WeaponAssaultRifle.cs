@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 [System.Serializable]
 public class AmmoEvent : UnityEngine.Events.UnityEvent<int, int> { }
@@ -36,14 +37,22 @@ public class WeaponAssaultRifle : MonoBehaviour
     [SerializeField]
     private WeaponSetting weaponSetting;    //무기 설정
 
-    private float lastAttackTime = 0;   //마지막 발사시간 체크
-    private bool isReload = false;      //재장전 중인지 확인
+    [Header("Aim UI")]
+    [SerializeField]
+    private Image imageAim;
 
-    private AudioSource audioSource;            //사운드 재생 컴포넌트
-    private PlayerAnimatorController animator;  //애니메이션 재생 제어
-    private CasingMemortPool casingMemortPool;  //탄피 생성 후 활성/비활성 관리
-    private ImpactMemotyPool impactMemotyPool;  //공격 효과 생성후 활성/비활성 관리
-    private Camera mainCamera;                  //광선 발사
+    private float lastAttackTime = 0;       //마지막 발사시간 체크
+    private bool isReload = false;          //재장전 중인지 확인
+    private bool isAttak = false;           //공격 여부 체크
+    private bool isModeChange = false;      //모드 전환 여부 체크
+    private float defaultModeFOV = 60;      //기본모드 카메라 FOV
+    private float aimModeFOV = 30;          //Aim 모드 카메라 FOV
+
+    private AudioSource audioSource;                //사운드 재생 컴포넌트
+    private PlayerAnimatorController animator;      //애니메이션 재생 제어
+    private CasingMemortPool casingMemortPool;      //탄피 생성 후 활성/비활성 관리
+    private ImpactMemotyPool impactMemotyPool;      //공격 효과 생성후 활성/비활성 관리
+    private Camera mainCamera;                      //광선 발사
 
     //외부에서 필요한 정보를 열람하기 위해 정의한 Get Property's
     public WeaponName WeaponName => weaponSetting.weaponName;
@@ -67,26 +76,36 @@ public class WeaponAssaultRifle : MonoBehaviour
         PlaySound(audioClipTakeOutWeapon);  //무기 장착 사운드 재생
         muzzleFlashEffect.SetActive(false); //총구 이펙트 비활성화
 
-        onMagazineEvent.Invoke(weaponSetting.currentMagazine);
-        onAmmoEvent.Invoke(weaponSetting.currentAmmo, weaponSetting.maxAmmo); //무기가 활성화될 때 해당 무기 탄 수 정보를 갱신
+        onMagazineEvent.Invoke(weaponSetting.currentMagazine);                      //무기가 활성화될 때 해당 무기 탄창 정보를 갱신
+        onAmmoEvent.Invoke(weaponSetting.currentAmmo, weaponSetting.maxAmmo);       //무기가 활성화될 때 해당 무기 탄 수 정보를 갱신
+
+        ResetVariables();
     }
 
     public void StartWeaponAction(int type = 0)
     {
-        //재장전 중이면 무기 액션 불가
-        if (isReload == true) return;
+        if (isReload == true) return;                   //재장전 중이면 무기 액션 불가능
+
+        if (isModeChange == true) return;               //모드 전환중이면 무기 액선 불가능
 
         if(type == 0)
         {
             //연속 공격
             if(weaponSetting.isAutomaticAttack == true)
             {
+                isAttak = true;
                 StartCoroutine("OnAttackLoop");
             }
             else    //단발 공격
             {
                 OnAttack();
             }
+        }
+        else
+        {
+            if (isAttak == true) return;
+
+            StartCoroutine("OnModeChange");
         }
     }
 
@@ -95,13 +114,13 @@ public class WeaponAssaultRifle : MonoBehaviour
         //마우스 왼쪽 클릭 (공격 종료)
         if(type == 0)
         {
+            isAttak = false;
             StopCoroutine("OnAttackLoop");
         }
     }
 
     public void StartReload()
     {
-        Debug.Log("스타트 리로드");
 
         //현재 재장전 중이면 재장전 불가
         if (isReload == true || weaponSetting.currentMagazine <= 0) return;
@@ -109,7 +128,6 @@ public class WeaponAssaultRifle : MonoBehaviour
         //무기 액션중 'R'키를 눌러 재장전을 하면 무기 액션 중지 후 재장전
         StopWeaponAction();
 
-        Debug.Log("리로드 코루틴 부르는중");
         StartCoroutine("OnReload1");
     }
 
@@ -145,11 +163,13 @@ public class WeaponAssaultRifle : MonoBehaviour
             weaponSetting.currentAmmo --;
             onAmmoEvent.Invoke(weaponSetting.currentAmmo, weaponSetting.maxAmmo);
 
-            //무기 애니메이션 재생
-            animator.Play("Fire", -1, 0);
+            //무기 애니메이션 재생 (모드에 따라 애니메이션 재생)
+            string animation = animator.AimModeIs == true ? "AimFire" : "Fire";
+            animator.Play(animation, -1, 0);
 
-            //총구 이펙트 재생
-            StartCoroutine("OnMuzzleFlashEffect");
+            //총구 이펙트 재생 조준 안할떄만 재생
+            if (animator.AimModeIs == false)
+                StartCoroutine("OnMuzzleFlashEffect");
 
             //공격 사운드 재생
             PlaySound(audioClipFire);
@@ -176,13 +196,12 @@ public class WeaponAssaultRifle : MonoBehaviour
         isReload = true;
 
         //재장전 애니메이션, 사운드 재생
-        Debug.Log("재생할려고 코루틴 들어옴");
         animator.OnReload();
         PlaySound(audioClipReload);
 
         while(true)
         {
-            if(audioSource.isPlaying == false && animator.CurrentAnimationIs("Movement"))
+            if(audioSource.isPlaying == false && (animator.CurrentAnimationIs("Movement") || animator.CurrentAnimationIs("AimFirePose")))
             {
                 isReload = false;
 
@@ -226,6 +245,40 @@ public class WeaponAssaultRifle : MonoBehaviour
             impactMemotyPool.SpawnImpact(hit);
         }
         Debug.DrawRay(bulletSpawnPoint.position, attacklDirection * weaponSetting.attackDistance, Color.blue);
+    }
+
+    private IEnumerator OnModeChange()
+    {
+        float current = 0;
+        float percent = 0;
+        float time = 0;
+
+        animator.AimModeIs = !animator.AimModeIs;
+        imageAim.enabled = !imageAim.enabled;
+
+        float start = mainCamera.fieldOfView;
+        float end = animator.AimModeIs == true ? aimModeFOV : defaultModeFOV;
+
+        isModeChange = true;
+
+        while(percent < 1)
+        {
+            current += Time.deltaTime;
+            percent = current / time;
+
+            mainCamera.fieldOfView = Mathf.Lerp(start, end, percent);
+
+            yield return null;
+        }
+
+        isModeChange = false;
+    }
+
+    private void ResetVariables()
+    {
+        isReload = false;
+        isAttak = false;
+        isModeChange = false;
     }
 
     private void PlaySound(AudioClip clip)
